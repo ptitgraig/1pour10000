@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CNEF - Carte Interactive Taux de Pénétration 2023</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <style>
+        :root {
+            --cnef-orange: #e65100;
+            --bg-light: #fdfdfd;
+        }
+
+        body {
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            background-color: var(--bg-light);
+        }
+
+        header {
+            background: white;
+            padding: 15px 25px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            z-index: 1000;
+        }
+
+        header h1 {
+            margin: 0;
+            font-size: 1.4rem;
+            color: var(--cnef-orange);
+            text-transform: uppercase;
+        }
+
+        header p {
+            margin: 5px 0 0;
+            font-size: 0.9rem;
+            color: #666;
+        }
+
+        #main-container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        #map {
+            flex: 3;
+            background: #f0f0f0;
+        }
+
+        #side-panel {
+            flex: 1;
+            min-width: 320px;
+            max-width: 400px;
+            background: white;
+            border-left: 1px solid #ddd;
+            padding: 25px;
+            display: flex;
+            flex-direction: column;
+            box-shadow: -2px 0 10px rgba(0,0,0,0.05);
+        }
+
+        .stats-box {
+            background: #fff8f5;
+            border: 1px solid #ffe0b2;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+
+        .rate-value {
+            font-size: 3rem;
+            font-weight: bold;
+            color: var(--cnef-orange);
+            display: block;
+        }
+
+        .rate-label {
+            font-size: 0.9rem;
+            color: #888;
+            margin-bottom: 15px;
+            display: block;
+        }
+
+        .progress-container {
+            background: #eee;
+            height: 12px;
+            border-radius: 6px;
+            margin: 15px 0;
+            overflow: hidden;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: var(--cnef-orange);
+            transition: width 0.5s ease;
+        }
+
+        .legend-container {
+            margin-top: auto;
+            font-size: 0.85rem;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 4px;
+        }
+
+        .color-box {
+            width: 20px;
+            height: 20px;
+            margin-right: 10px;
+            border: 1px solid rgba(0,0,0,0.1);
+        }
+
+        /* Responsive */
+        @media (max-width: 800px) {
+            #main-container { flex-direction: column; }
+            #side-panel { max-width: none; border-left: none; border-top: 1px solid #ddd; }
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>Taux de pénétration | 2023</h1>
+    <p>Objectif : 1 Église pour 10 000 habitants (Membres du CNEF)</p>
+</header>
+
+<div id="main-container">
+    <div id="map"></div>
+    <div id="side-panel">
+        <div id="intro-text">
+            <h3>Détails du département</h3>
+            <p>Cliquez sur la carte pour consulter les statistiques locales.</p>
+        </div>
+        
+        <div id="data-view" style="display: none;">
+            <h2 id="dept-name">Nom du département</h2>
+            <div class="stats-box">
+                <span class="rate-label">Taux d'implantation</span>
+                <span class="rate-value" id="dept-rate">0.00</span>
+                <span class="rate-label">églises / 10 000 hab.</span>
+                
+                <div class="progress-container">
+                    <div id="dept-progress" class="progress-bar" style="width: 0%"></div>
+                </div>
+                <p id="goal-text" style="font-size: 0.8rem; text-align: right; color: #666;"></p>
+            </div>
+        </div>
+
+        <div class="legend-container">
+            <strong>Nombre d'Églises / 10 000 hab.</strong>
+            <div id="legend-items" style="margin-top:10px"></div>
+        </div>
+    </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+    // 1. Configuration des données (Estimations basées sur la carte visuelle)
+    // Les codes correspondent aux codes officiels (ex: 75 pour Paris, 971 pour Guadeloupe)
+    const churchData = {
+        "971": 1.75, "972": 1.75, "973": 0.60, "974": 0.80, "976": 0.07,
+        "67": 0.80, "68": 0.80, "30": 0.80, "26": 0.80, "84": 0.60,
+        "13": 0.40, "75": 0.30, "69": 0.40, "33": 0.20, "44": 0.20,
+        "59": 0.30, "31": 0.30, "06": 0.40, "2A": 0.40, "2B": 0.40,
+        "default": 0.20 // Pour les zones claires dominantes
+    };
+
+    // 2. Échelle de couleurs de l'image
+    const grades = [0.07, 0.20, 0.30, 0.40, 0.60, 0.80, 1.20, 1.75];
+    const colors = ['#fff5eb', '#fee6ce', '#fdd0a2', '#fdae6b', '#fd8d3c', '#f16913', '#d94801', '#8c2d04'];
+
+    function getColor(d) {
+        for (let i = grades.length - 1; i >= 0; i--) {
+            if (d >= grades[i]) return colors[i];
+        }
+        return colors[0];
+    }
+
+    // 3. Initialisation de la carte
+    const map = L.map('map').setView([46.603354, 1.888334], 6);
+
+    // Style de fond minimaliste
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; OpenStreetMap &copy; CARTO'
+    }).addTo(map);
+
+    // 4. Chargement des frontières GeoJSON
+    // Source : GregoireDavid (GitHub) - Données simplifiées pour performance
+    fetch('https://raw.githubusercontent.com/gregoiredavid/france-geojson/master/departements-avec-outre-mer.geojson')
+        .then(res => res.json())
+        .then(data => {
+            L.geoJson(data, {
+                style: function(feature) {
+                    const code = feature.properties.code;
+                    const rate = churchData[code] || churchData["default"];
+                    return {
+                        fillColor: getColor(rate),
+                        weight: 1,
+                        opacity: 1,
+                        color: 'white',
+                        fillOpacity: 0.85
+                    };
+                },
+                onEachFeature: onEachFeature
+            }).addTo(map);
+        });
+
+    // 5. Interactions
+    function onEachFeature(feature, layer) {
+        layer.on({
+            mouseover: (e) => {
+                e.target.setStyle({ fillOpacity: 1, weight: 2, color: '#666' });
+            },
+            mouseout: (e) => {
+                e.target.setStyle({ fillOpacity: 0.85, weight: 1, color: 'white' });
+            },
+            click: (e) => {
+                const props = feature.properties;
+                const rate = churchData[props.code] || churchData["default"];
+                showDetails(props.nom, props.code, rate);
+                
+                // Zoom auto sur mobile
+                if(window.innerWidth < 800) {
+                    map.fitBounds(e.target.getBounds());
+                }
+            }
+        });
+    }
+
+    function showDetails(name, code, rate) {
+        document.getElementById('intro-text').style.display = 'none';
+        document.getElementById('data-view').style.display = 'block';
+        document.getElementById('dept-name').innerText = `${name} (${code})`;
+        document.getElementById('dept-rate').innerText = rate.toFixed(2);
+        
+        // Calcul progression (Max 1.00 pour l'objectif)
+        const progress = Math.min((rate / 1.0) * 100, 100);
+        const bar = document.getElementById('dept-progress');
+        bar.style.width = progress + '%';
+        bar.style.backgroundColor = rate >= 1 ? '#2e7d32' : '#e65100';
+        
+        document.getElementById('goal-text').innerText = rate >= 1 
+            ? "Objectif atteint !" 
+            : `${Math.round(100 - progress)}% restants pour l'objectif`;
+    }
+
+    // 6. Génération de la légende
+    const legendItems = document.getElementById('legend-items');
+    grades.forEach((grade, i) => {
+        legendItems.innerHTML += `
+            <div class="legend-item">
+                <div class="color-box" style="background:${colors[i]}"></div>
+                <span>${grade.toFixed(2)}</span>
+            </div>
+        `;
+    });
+
+</script>
+
+</body>
+</html>
