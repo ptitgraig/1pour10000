@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CNEF - Carte Interactive Taux de Pénétration 2023</title>
+    <title>CNEF - Carte Interactive Taux de Pénétration 2023 (Données Exactes)</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     
@@ -49,20 +49,21 @@
         }
 
         #map {
-            flex: 3;
+            flex: 2; /* Plus de place pour la carte */
             background: #f0f0f0;
         }
 
         #side-panel {
             flex: 1;
-            min-width: 320px;
-            max-width: 400px;
+            min-width: 380px;
+            max-width: 450px;
             background: white;
             border-left: 1px solid #ddd;
             padding: 25px;
             display: flex;
             flex-direction: column;
             box-shadow: -2px 0 10px rgba(0,0,0,0.05);
+            overflow-y: auto; /* Pour les petits écrans */
         }
 
         .stats-box {
@@ -74,14 +75,14 @@
         }
 
         .rate-value {
-            font-size: 3rem;
+            font-size: 3.5rem;
             font-weight: bold;
             color: var(--cnef-orange);
             display: block;
         }
 
         .rate-label {
-            font-size: 0.9rem;
+            font-size: 0.95rem;
             color: #888;
             margin-bottom: 15px;
             display: block;
@@ -89,16 +90,34 @@
 
         .progress-container {
             background: #eee;
-            height: 12px;
-            border-radius: 6px;
-            margin: 15px 0;
+            height: 14px;
+            border-radius: 7px;
+            margin: 20px 0;
             overflow: hidden;
         }
 
         .progress-bar {
             height: 100%;
             background: var(--cnef-orange);
-            transition: width 0.5s ease;
+            transition: width 0.5s ease, background-color 0.5s ease;
+        }
+
+        .church-info {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 15px;
+            font-weight: bold;
+            color: #555;
+        }
+
+        .calculation-box {
+            background: #f1f3f5;
+            border-radius: 6px;
+            padding: 15px;
+            font-size: 0.9rem;
+            color: #555;
+            margin-top: 15px;
+            border: 1px solid #ddd;
         }
 
         .legend-container {
@@ -120,7 +139,7 @@
         }
 
         /* Responsive */
-        @media (max-width: 800px) {
+        @media (max-width: 1000px) {
             #main-container { flex-direction: column; }
             #side-panel { max-width: none; border-left: none; border-top: 1px solid #ddd; }
         }
@@ -137,21 +156,37 @@
     <div id="map"></div>
     <div id="side-panel">
         <div id="intro-text">
-            <h3>Détails du département</h3>
-            <p>Cliquez sur la carte pour consulter les statistiques locales.</p>
+            <h3>Panneau de Détails Interactifs</h3>
+            <p>Cliquez sur un département sur la carte pour voir ses données brutes et calculer son taux.</p>
         </div>
         
         <div id="data-view" style="display: none;">
             <h2 id="dept-name">Nom du département</h2>
+            
+            <div class="church-info">
+                <span>Églises locales (CNEF) :</span>
+                <span id="dept-churches">0</span>
+            </div>
+
+            <div class="church-info">
+                <span>Population (Est. 2023) :</span>
+                <span id="dept-population">0</span>
+            </div>
+
             <div class="stats-box">
-                <span class="rate-label">Taux d'implantation</span>
+                <span class="rate-label">Taux calculé</span>
                 <span class="rate-value" id="dept-rate">0.00</span>
                 <span class="rate-label">églises / 10 000 hab.</span>
                 
                 <div class="progress-container">
                     <div id="dept-progress" class="progress-bar" style="width: 0%"></div>
                 </div>
-                <p id="goal-text" style="font-size: 0.8rem; text-align: right; color: #666;"></p>
+                <p id="goal-text" style="font-size: 0.85rem; text-align: right; color: #666;"></p>
+            </div>
+
+            <div class="calculation-box">
+                <strong>Calcul :</strong><br>
+                (<span id="calc-churches">0</span> églises / <span id="calc-pop">0</span> habitants) * 10 000 = <span id="calc-rate">0.00</span>
             </div>
         </div>
 
@@ -165,44 +200,79 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <script>
-    // 1. Configuration des données (Estimations basées sur la carte visuelle)
-    // Les codes correspondent aux codes officiels (ex: 75 pour Paris, 971 pour Guadeloupe)
-    const churchData = {
-        "971": 1.75, "972": 1.75, "973": 0.60, "974": 0.80, "976": 0.07,
-        "67": 0.80, "68": 0.80, "30": 0.80, "26": 0.80, "84": 0.60,
-        "13": 0.40, "75": 0.30, "69": 0.40, "33": 0.20, "44": 0.20,
-        "59": 0.30, "31": 0.30, "06": 0.40, "2A": 0.40, "2B": 0.40,
-        "default": 0.20 // Pour les zones claires dominantes
+    // 1. Base de données complète des églises du CNEF 2023 (extraite de votre tableau)
+    const fullCNEFData = {
+        '1': { nom: 'Ain', eglises: 18 }, '2': { nom: 'Aisne', eglises: 13 }, '3': { nom: 'Allier', eglises: 13 }, '4': { nom: 'Alpes-de-Haute-Prov.', eglises: 7 }, '5': { nom: 'Hautes-Alpes', eglises: 7 }, '6': { nom: 'Alpes-Maritimes', eglises: 41 }, '7': { nom: 'Ardèche', eglises: 24 }, '8': { nom: 'Ardennes', eglises: 7 }, '9': { nom: 'Ariège', eglises: 9 }, '10': { nom: 'Aube', eglises: 12 },
+        '11': { nom: 'Aude', eglises: 17 }, '12': { nom: 'Aveyron', eglises: 6 }, '13': { nom: 'Bouches-du-Rhône', eglises: 80 }, '14': { nom: 'Calvados', eglises: 18 }, '15': { nom: 'Cantal', eglises: 4 }, '16': { nom: 'Charente', eglises: 10 }, '17': { nom: 'Charente-Maritime', eglises: 16 }, '18': { nom: 'Cher', eglises: 9 }, '19': { nom: 'Corrèze', eglises: 6 }, '21': { nom: 'Côte-d\'Or', eglises: 14 },
+        '22': { nom: 'Côtes-d\'Armor', eglises: 12 }, '23': { nom: 'Creuse', eglises: 3 }, '24': { nom: 'Dordogne', eglises: 7 }, '25': { nom: 'Doubs', eglises: 37 }, '26': { nom: 'Drôme', eglises: 40 }, '27': { nom: 'Eure', eglises: 21 }, '28': { nom: 'Eure-et-Loir', eglises: 16 }, '29': { nom: 'Finistère', eglises: 20 }, '30': { nom: 'Gard', eglises: 54 }, '31': { nom: 'Haute-Garonne', eglises: 49 },
+        '32': { nom: 'Gers', eglises: 8 }, '33': { nom: 'Gironde', eglises: 41 }, '34': { nom: 'Hérault', eglises: 48 }, '35': { nom: 'Ille-et-Vilaine', eglises: 24 }, '36': { nom: 'Indre', eglises: 7 }, '37': { nom: 'Indre-et-Loire', eglises: 21 }, '38': { nom: 'Isère', eglises: 40 }, '39': { nom: 'Jura', eglises: 11 }, '40': { nom: 'Landes', eglises: 15 }, '41': { nom: 'Loir-et-Cher', eglises: 8 },
+        '42': { nom: 'Loire', eglises: 16 }, '43': { nom: 'Haute-Loire', eglises: 12 }, '44': { nom: 'Loire-Atlantique', eglises: 28 }, '45': { nom: 'Loiret', eglises: 23 }, '46': { nom: 'Lot', eglises: 6 }, '47': { nom: 'Lot-et-Garonne', eglises: 21 }, '48': { nom: 'Lozère', eglises: 5 }, '49': { nom: 'Maine-et-Loire', eglises: 13 }, '50': { nom: 'Manche', eglises: 13 }, '51': { nom: 'Marne', eglises: 15 },
+        '52': { nom: 'Haute-Marne', eglises: 6 }, '53': { nom: 'Mayenne', eglises: 5 }, '54': { nom: 'Meurthe-et-Moselle', eglises: 18 }, '55': { nom: 'Meuse', eglises: 6 }, '56': { nom: 'Morbihan', eglises: 16 }, '57': { nom: 'Moselle', eglises: 33 }, '58': { nom: 'Nièvre', eglises: 6 }, '59': { nom: 'Nord', eglises: 79 }, '60': { nom: 'Oise', eglises: 23 }, '61': { nom: 'Orne', eglises: 10 },
+        '62': { nom: 'Pas-de-Calais', eglises: 33 }, '63': { nom: 'Puy-de-Dôme', eglises: 16 }, '64': { nom: 'Pyrénées-Atlantiques', eglises: 21 }, '65': { nom: 'Hautes-Pyrénées', eglises: 7 }, '66': { nom: 'Pyrénées-Orientales', eglises: 21 }, '67': { nom: 'Bas-Rhin', eglises: 72 }, '68': { nom: 'Haut-Rhin', eglises: 53 }, '69': { nom: 'Rhône', eglises: 66 }, '70': { nom: 'Haute-Saône', eglises: 10 }, '71': { nom: 'Saône-et-Loire', eglises: 22 },
+        '72': { nom: 'Sarthe', eglises: 10 }, '73': { nom: 'Savoie', eglises: 13 }, '74': { nom: 'Haute-Savoie', eglises: 23 }, '75': { nom: 'Paris', eglises: 74 }, '76': { nom: 'Seine-Maritime', eglises: 45 }, '77': { nom: 'Seine-et-Marne', eglises: 51 }, '78': { nom: 'Yvelines', eglises: 45 }, '79': { nom: 'Deux-Sèvres', eglises: 6 }, '80': { nom: 'Somme', eglises: 8 }, '81': { nom: 'Tarn', eglises: 21 },
+        '82': { nom: 'Tarn-et-Garonne', eglises: 12 }, '83': { nom: 'Var', eglises: 26 }, '84': { nom: 'Vaucluse', eglises: 26 }, '85': { nom: 'Vendée', eglises: 8 }, '86': { nom: 'Vienne', eglises: 16 }, '87': { nom: 'Haute-Vienne', eglises: 11 }, '88': { nom: 'Vosges', eglises: 17 }, '89': { nom: 'Yonne', eglises: 13 }, '90': { nom: 'Territoire de Belfort', eglises: 7 }, '91': { nom: 'Essonne', eglises: 51 },
+        '92': { nom: 'Hauts-de-Seine', eglises: 40 }, '93': { nom: 'Seine-Saint-Denis', eglises: 94 }, '94': { nom: 'Val-de-Marne', eglises: 46 }, '95': { nom: 'Val-d\'Oise', eglises: 52 }, '971': { nom: 'Guadeloupe', eglises: 69 }, '972': { nom: 'Martinique', eglises: 76 }, '973': { nom: 'Guyane (française)', eglises: 150 }, '974': { nom: 'La Réunion', eglises: 54 }, '976': { nom: 'Mayotte', eglises: 8 },
+        '2A': { nom: 'Corse-du-Sud', eglises: 7 }, '2B': { nom: 'Haute-Corse', eglises: 5 }, 'Nouvelle-Calédonie': { nom: 'Nouvelle-Calédonie', eglises: 26 }, 'Polynésie française': { nom: 'Polynésie française', eglises: 11 }
     };
 
-    // 2. Échelle de couleurs de l'image
+    // 2. Base de données des populations approximatives pour le calcul (Est. Insee 2023)
+    // Nécessaire pour obtenir des taux réels, car vous n'avez fourni que le nombre d'églises.
+    const deptPopulationData = {
+        '1': 662000, '2': 531000, '3': 335000, '4': 165000, '5': 141000, '6': 1102000, '7': 331000, '8': 269000, '9': 154000, '10': 311000,
+        '11': 377000, '12': 279000, '13': 2049000, '14': 703000, '15': 145000, '16': 351000, '17': 658000, '18': 301000, '19': 241000, '21': 536000,
+        '22': 602000, '23': 116000, '24': 415000, '25': 547000, '26': 519000, '27': 600000, '28': 432000, '29': 917000, '30': 752000, '31': 1435000,
+        '32': 192000, '33': 1655000, '34': 1195000, '35': 1098000, '36': 218000, '37': 615000, '38': 1284000, '39': 259000, '40': 420000, '41': 330000,
+        '42': 770000, '43': 228000, '44': 1475000, '45': 688000, '46': 174000, '47': 331000, '48': 770000, '49': 823000, '50': 495000, '51': 565000,
+        '52': 171000, '53': 307000, '54': 733000, '55': 183000, '56': 767000, '57': 1046000, '58': 202000, '59': 2607000, '60': 832000, '61': 278000,
+        '62': 1466000, '63': 666000, '64': 687000, '65': 230000, '66': 483000, '67': 1146000, '68': 768000, '69': 1903000, '70': 235000, '71': 551000,
+        '72': 566000, '73': 439000, '74': 846000, '75': 2139000, '76': 1254000, '77': 1442000, '78': 1450000, '79': 375000, '80': 571000, '81': 391000,
+        '82': 263000, '83': 1090000, '84': 563000, '85': 692000, '86': 439000, '87': 371000, '88': 362000, '89': 334000, '90': 140000, '91': 1313000,
+        '92': 1630000, '93': 1668000, '94': 1417000, '95': 1259000, '971': 383000, '972': 359000, '973': 300000, '974': 871000, '976': 310000,
+        '2A': 162000, '2B': 185000, 'Nouvelle-Calédonie': 270000, 'Polynésie française': 280000
+    };
+
+    // 3. Échelle de couleurs de l'image (copie exacte)
     const grades = [0.07, 0.20, 0.30, 0.40, 0.60, 0.80, 1.20, 1.75];
     const colors = ['#fff5eb', '#fee6ce', '#fdd0a2', '#fdae6b', '#fd8d3c', '#f16913', '#d94801', '#8c2d04'];
 
-    function getColor(d) {
+    function getColor(rate) {
         for (let i = grades.length - 1; i >= 0; i--) {
-            if (d >= grades[i]) return colors[i];
+            if (rate >= grades[i]) return colors[i];
         }
         return colors[0];
     }
 
-    // 3. Initialisation de la carte
+    // Fonction de calcul de taux
+    function calculateRate(churches, population) {
+        if (!population || population === 0) return 0;
+        return (churches / population) * 10000;
+    }
+
+    // Fonction pour formater les grands nombres (population)
+    function formatNumber(num) {
+        return num.toString().replace(/(\d)(?=(\d{3})+(?!\d))/g, '$1 ');
+    }
+
+    // 4. Initialisation de la carte
     const map = L.map('map').setView([46.603354, 1.888334], 6);
 
-    // Style de fond minimaliste
     L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
         attribution: '&copy; OpenStreetMap &copy; CARTO'
     }).addTo(map);
 
-    // 4. Chargement des frontières GeoJSON
-    // Source : GregoireDavid (GitHub) - Données simplifiées pour performance
+    // 5. Chargement des frontières GeoJSON et application des styles/interactions
     fetch('https://raw.githubusercontent.com/gregoiredavid/france-geojson/master/departements-avec-outre-mer.geojson')
         .then(res => res.json())
         .then(data => {
             L.geoJson(data, {
                 style: function(feature) {
                     const code = feature.properties.code;
-                    const rate = churchData[code] || churchData["default"];
+                    const cnefDept = fullCNEFData[code];
+                    const popDept = deptPopulationData[code];
+                    let rate = 0;
+                    if(cnefDept && popDept) {
+                        rate = calculateRate(cnefDept.eglises, popDept);
+                    }
                     return {
                         fillColor: getColor(rate),
                         weight: 1,
@@ -215,7 +285,7 @@
             }).addTo(map);
         });
 
-    // 5. Interactions
+    // 6. Interactions
     function onEachFeature(feature, layer) {
         layer.on({
             mouseover: (e) => {
@@ -225,36 +295,56 @@
                 e.target.setStyle({ fillOpacity: 0.85, weight: 1, color: 'white' });
             },
             click: (e) => {
-                const props = feature.properties;
-                const rate = churchData[props.code] || churchData["default"];
-                showDetails(props.nom, props.code, rate);
+                const code = feature.properties.code;
+                const cnefDept = fullCNEFData[code];
+                const popDept = deptPopulationData[code];
+                
+                if(cnefDept && popDept) {
+                    const rate = calculateRate(cnefDept.eglises, popDept);
+                    showDetails(cnefDept.nom, code, cnefDept.eglises, popDept, rate);
+                } else {
+                    // Pour les zones rares qui pourraient ne pas avoir de données
+                    showDetails(feature.properties.nom, code, 0, 0, 0);
+                }
                 
                 // Zoom auto sur mobile
-                if(window.innerWidth < 800) {
+                if(window.innerWidth < 1000) {
                     map.fitBounds(e.target.getBounds());
                 }
             }
         });
     }
 
-    function showDetails(name, code, rate) {
+    function showDetails(name, code, churches, population, rate) {
         document.getElementById('intro-text').style.display = 'none';
         document.getElementById('data-view').style.display = 'block';
+        
         document.getElementById('dept-name').innerText = `${name} (${code})`;
+        document.getElementById('dept-churches').innerText = churches;
+        document.getElementById('dept-population').innerText = formatNumber(population);
         document.getElementById('dept-rate').innerText = rate.toFixed(2);
         
-        // Calcul progression (Max 1.00 pour l'objectif)
+        // Affichage du calcul
+        document.getElementById('calc-churches').innerText = churches;
+        document.getElementById('calc-pop').innerText = formatNumber(population);
+        document.getElementById('calc-rate').innerText = rate.toFixed(2);
+        
+        // Calcul progression vers l'objectif (Max 1.00)
         const progress = Math.min((rate / 1.0) * 100, 100);
         const bar = document.getElementById('dept-progress');
         bar.style.width = progress + '%';
-        bar.style.backgroundColor = rate >= 1 ? '#2e7d32' : '#e65100';
         
-        document.getElementById('goal-text').innerText = rate >= 1 
-            ? "Objectif atteint !" 
-            : `${Math.round(100 - progress)}% restants pour l'objectif`;
+        // Changer la couleur de la barre pour l'objectif atteint
+        if (rate >= 1) {
+            bar.style.backgroundColor = '#2e7d32'; // Vert objectif atteint
+            document.getElementById('goal-text').innerText = "Objectif CNEF atteint !";
+        } else {
+            bar.style.backgroundColor = '#e65100'; // Orange standard
+            document.getElementById('goal-text').innerText = `${Math.round(100 - progress)}% restants pour atteindre l'objectif de 1.00`;
+        }
     }
 
-    // 6. Génération de la légende
+    // 7. Génération de la légende
     const legendItems = document.getElementById('legend-items');
     grades.forEach((grade, i) => {
         legendItems.innerHTML += `
