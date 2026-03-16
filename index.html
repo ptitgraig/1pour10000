@@ -3,154 +3,154 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CNEF & API Gouv - Live Data</title>
+    <title>Observatoire CNEF 2023 - Données INSEE 2026</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        :root { --cnef-orange: #e65100; --bg: #f4f7f6; }
-        body { font-family: 'Segoe UI', sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; background: var(--bg); }
-        header { background: white; padding: 15px 25px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); display: flex; justify-content: space-between; align-items: center; z-index: 1000; }
+        :root { --cnef-orange: #e65100; --bg: #f8f9fa; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; background: var(--bg); display: flex; flex-direction: column; height: 100vh; }
+        header { background: #fff; padding: 15px 25px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center; z-index: 1000; }
         #main { display: flex; flex: 1; overflow: hidden; }
-        #map { flex: 2; }
-        #side-panel { flex: 1; min-width: 350px; background: white; border-left: 1px solid #ddd; padding: 20px; overflow-y: auto; }
+        #map { flex: 2; border-right: 1px solid #ddd; }
+        #panel { flex: 1; min-width: 380px; background: white; padding: 25px; overflow-y: auto; box-shadow: -5px 0 15px rgba(0,0,0,0.02); }
         
-        .switch-container { display: flex; align-items: center; gap: 10px; background: #eee; padding: 5px 15px; border-radius: 20px; }
-        .switch { position: relative; width: 40px; height: 20px; cursor: pointer; }
-        .switch input { opacity: 0; width: 0; height: 0; }
-        .slider { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: #999; transition: .4s; border-radius: 20px; }
-        .slider:before { position: absolute; content: ""; height: 14px; width: 14px; left: 3px; bottom: 3px; background: white; transition: .4s; border-radius: 50%; }
-        input:checked + .slider { background: var(--cnef-orange); }
-        input:checked + .slider:before { transform: translateX(20px); }
+        .toggle-box { background: #eee; padding: 4px; border-radius: 25px; display: flex; align-items: center; gap: 10px; cursor: pointer; }
+        .toggle-btn { padding: 6px 15px; border-radius: 20px; font-size: 0.85rem; font-weight: bold; transition: 0.3s; }
+        .toggle-btn.active { background: var(--cnef-orange); color: white; }
 
-        .stats-card { background: #fff8f5; border: 1px solid #ffe0b2; padding: 20px; border-radius: 10px; margin-top: 20px; }
-        .big-number { font-size: 3.5rem; font-weight: 800; color: var(--cnef-orange); line-height: 1; }
-        .loading { position: fixed; inset: 0; background: white; z-index: 3000; display: flex; flex-direction: column; justify-content: center; align-items: center; }
-        .legend-item { display: flex; align-items: center; gap: 10px; font-size: 0.8rem; margin-top: 5px; }
-        .color-box { width: 15px; height: 15px; border-radius: 3px; }
+        .stat-card { background: #fff8f5; border: 1px solid #ffe0b2; padding: 20px; border-radius: 12px; margin-top: 20px; }
+        .rate-display { font-size: 3.5rem; font-weight: 900; color: var(--cnef-orange); margin: 10px 0; line-height: 1; }
+        .progress-bar { height: 10px; background: #e0e0e0; border-radius: 5px; margin: 15px 0; overflow: hidden; }
+        .progress-fill { height: 100%; background: var(--cnef-orange); transition: width 0.8s cubic-bezier(0.17, 0.67, 0.83, 0.67); }
+        
+        .legend-item { display: flex; align-items: center; gap: 10px; font-size: 0.75rem; margin-bottom: 4px; }
+        .color-key { width: 14px; height: 14px; border-radius: 2px; }
     </style>
 </head>
 <body>
 
-<div id="loader" class="loading">
-    <h2>Chargement des données API Gouv...</h2>
-    <p>Synchronisation avec la population légale en cours.</p>
-</div>
-
 <header>
     <div>
-        <h1 style="margin:0; font-size: 1.2rem;">OBSERVATOIRE CNEF 2023</h1>
-        <span id="mode-label" style="font-size: 0.8rem; color: #666;">Vue : Départements</span>
+        <h1 style="margin:0; font-size: 1.3rem; color: #333;">OBSERVATOIRE CNEF</h1>
+        <small id="status">Données INSEE 2026 (Réf. 2023)</small>
     </div>
-    <div class="switch-container">
-        <small>Dépt.</small>
-        <label class="switch">
-            <input type="checkbox" id="toggle-view">
-            <span class="slider"></span>
-        </label>
-        <small>Régions</small>
+    <div class="toggle-box" onclick="toggleMode()">
+        <div id="btn-depts" class="toggle-btn active">Départements</div>
+        <div id="btn-regions" class="toggle-btn">Régions</div>
     </div>
 </header>
 
 <div id="main">
     <div id="map"></div>
-    <div id="side-panel">
-        <div id="placeholder"><h3>Sélectionnez une zone</h3><p>Cliquez sur la carte pour voir l'analyse.</p></div>
-        <div id="details" style="display:none">
-            <h2 id="view-name" style="margin-top:0">Nom</h2>
-            <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
-                <span>Églises : <b id="view-churches">0</b></span>
-                <span>Habitants : <b id="view-pop">0</b></span>
+    <div id="panel">
+        <div id="intro">
+            <h2>Analyse Territoriale</h2>
+            <p>Cliquez sur une zone pour calculer le taux de pénétration par rapport à la population légale.</p>
+        </div>
+        <div id="data-view" style="display:none">
+            <h2 id="z-name" style="margin-bottom:5px; color: var(--cnef-orange);">Nom</h2>
+            <div style="font-size: 0.9rem; color: #666; margin-bottom: 20px;">
+                Population légale : <b id="z-pop">0</b> <br>
+                Églises CNEF : <b id="z-church">0</b>
             </div>
-            <div class="stats-card">
-                <div style="font-size: 0.9rem; color: #777;">Taux pour 10 000 hab.</div>
-                <div class="big-number" id="view-rate">0.00</div>
-                <div style="background:#ddd; height:8px; border-radius:4px; margin: 15px 0; overflow:hidden">
-                    <div id="view-progress" style="height:100%; background: var(--cnef-orange); width: 0%;"></div>
-                </div>
-                <div id="view-goal" style="font-size: 0.8rem; font-weight: bold;"></div>
+            
+            <div class="stat-card">
+                <span style="text-transform: uppercase; font-size: 0.7rem; letter-spacing: 1px; color: #888;">Taux pour 10 000 hab.</span>
+                <div class="rate-display" id="z-rate">0.00</div>
+                <div class="progress-bar"><div id="z-fill" class="progress-fill"></div></div>
+                <div id="z-msg" style="font-size: 0.85rem; font-weight: bold;"></div>
             </div>
         </div>
-        <div style="margin-top: 30px;">
-            <small><b>Légende (Taux de pénétration)</b></small>
-            <div id="legend"></div>
+
+        <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee;">
+            <small><b>Légende des taux</b></small>
+            <div id="legend-list" style="margin-top:10px"></div>
         </div>
     </div>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-    // 1. Données CNEF 2023 indexées par code (avec 0 pour les 1-9)
-    const cnefData = {
-        '01':18, '02':13, '03':13, '04':7, '05':7, '06':41, '07':24, '08':7, '09':9, '10':12, '11':17, '12':6, '13':80, '14':18, '15':4, '16':10, '17':16, '18':9, '19':6, '21':14, '22':12, '23':3, '24':7, '25':37, '26':40, '27':21, '28':16, '29':20, '30':54, '31':49, '32':8, '33':41, '34':48, '35':24, '36':7, '37':21, '38':40, '39':11, '40':15, '41':8, '42':16, '43':12, '44':28, '45':23, '46':6, '47':21, '48':5, '49':13, '50':13, '51':15, '52':6, '53':5, '54':18, '55':6, '56':16, '57':33, '58':6, '59':79, '60':23, '61':10, '62':33, '63':16, '64':21, '65':7, '66':21, '67':72, '68':53, '69':66, '70':10, '71':22, '72':10, '73':13, '74':23, '75':74, '76':45, '77':51, '78':45, '79':6, '80':8, '81':21, '82':12, '83':26, '84':26, '85':8, '86':16, '87':11, '88':17, '89':13, '90':7, '91':51, '92':40, '93':94, '94':46, '95':52, '971':69, '972':76, '973':150, '974':54, '976':8, '2A':7, '2B':5
+    // 1. DATA INSEE 2026 (Populations municipales officielles entrées en vigueur le 01/01/2026)
+    // Source: Insee / data.gouv.fr (Extraits des populations municipales 2023)
+    const inseePop = {
+        '01': 679344, '02': 523342, '03': 333298, '04': 168054, '05': 143467, '06': 1128418, '07': 334231, '08': 265893, '09': 155722, '10': 310447,
+        '11': 379648, '12': 279609, '13': 2087658, '14': 709441, '15': 144196, '16': 352683, '17': 672279, '18': 298660, '19': 240826, '21': 540100,
+        '22': 611859, '23': 115527, '24': 417614, '25': 547163, '26': 524207, '27': 602714, '28': 433129, '29': 933455, '30': 770940, '31': 1471468,
+        '32': 192645, '33': 1690493, '34': 1230289, '35': 1120666, '36': 216069, '37': 619362, '38': 1298990, '39': 257973, '40': 433570, '41': 328543,
+        '42': 774133, '43': 228654, '44': 1487570, '45': 691268, '46': 176473, '47': 333602, '48': 76486, '49': 833776, '50': 497522, '51': 563076,
+        '52': 168331, '53': 305468, '54': 732236, '55': 180290, '56': 783390, '57': 1051309, '58': 201417, '59': 2615635, '60': 829899, '61': 275201,
+        '62': 1457905, '63': 664453, '64': 706564, '65': 231349, '66': 496855, '67': 1163810, '68': 770738, '69': 1914667, '70': 233185, '71': 550310,
+        '72': 566733, '73': 448226, '74': 861158, '75': 2103778, '76': 1260964, '77': 1468108, '78': 1485086, '79': 375229, '80': 565413, '81': 397352,
+        '82': 265817, '83': 1119307, '84': 572056, '85': 713609, '86': 438897, '87': 373167, '88': 357248, '89': 332267, '90': 140255, '91': 1338485,
+        '92': 1654712, '93': 1704316, '94': 1426929, '95': 1281653, '2A': 168306, '2B': 187180, '971': 384160, '972': 360630, '973': 293996, '974': 889679
     };
+
+    const cnefData = {'01':18,'02':13,'03':13,'04':7,'05':7,'06':41,'07':24,'08':7,'09':9,'10':12,'11':17,'12':6,'13':80,'14':18,'15':4,'16':10,'17':16,'18':9,'19':6,'21':14,'22':12,'23':3,'24':7,'25':37,'26':40,'27':21,'28':16,'29':20,'30':54,'31':49,'32':8,'33':41,'34':48,'35':24,'36':7,'37':21,'38':40,'39':11,'40':15,'41':8,'42':16,'43':12,'44':28,'45':23,'46':6,'47':21,'48':5,'49':13,'50':13,'51':15,'52':6,'53':5,'54':18,'55':6,'56':16,'57':33,'58':6,'59':79,'60':23,'61':10,'62':33,'63':16,'64':21,'65':7,'66':21,'67':72,'68':53,'69':66,'70':10,'71':22,'72':10,'73':13,'74':23,'75':74,'76':45,'77':51,'78':45,'79':6,'80':8,'81':21,'82':12,'83':26,'84':26,'85':8,'86':16,'87':11,'88':17,'89':13,'90':7,'91':51,'92':40,'93':94,'94':46,'95':52,'971':69,'972':76,'973':150,'974':54,'2A':7,'2B':5};
 
     const grades = [0.07, 0.20, 0.30, 0.40, 0.60, 0.80, 1.20, 1.75];
     const colors = ['#fff5eb', '#fee6ce', '#fdd0a2', '#fdae6b', '#fd8d3c', '#f16913', '#d94801', '#8c2d04'];
-
-    let storage = { depts: {}, regions: {} };
+    let currentMode = 'depts';
     let geoLayer = null;
+    let mapData = { depts: {}, regions: {} };
 
-    const map = L.map('map').setView([46.5, 2], 6);
+    const map = L.map('map').setView([46.5, 2.5], 6);
     L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png').addTo(map);
 
-    // --- FONCTION COEUR : RECUPERATION API ---
-    async function fetchData() {
-        try {
-            // Fetch des départements avec population et lien région
-            const dRes = await fetch('https://geo.api.gouv.fr/departements?fields=nom,code,population,codeRegion');
-            const depts = await dRes.json();
+    // Initialisation
+    async function init() {
+        // Préparation des données par département
+        Object.keys(inseePop).forEach(id => {
+            const count = cnefData[id] || 0;
+            const pop = inseePop[id];
+            mapData.depts[id] = { pop, church: count, rate: (count / pop) * 10000 };
+        });
 
-            // Fetch des noms de régions
-            const rRes = await fetch('https://geo.api.gouv.fr/regions?fields=nom,code');
-            const regions = await rRes.json();
+        // Agrégation régions via l'API Géo pour les liens Dép->Région
+        const res = await fetch('https://geo.api.gouv.fr/departements?fields=code,codeRegion');
+        const links = await res.json();
+        
+        const regRes = await fetch('https://geo.api.gouv.fr/regions');
+        const regNames = await regRes.json();
 
-            // 1. Initialiser les régions dans le stockage
-            regions.forEach(r => {
-                storage.regions[r.code] = { nom: r.nom, pop: 0, churches: 0, rate: 0 };
-            });
+        links.forEach(l => {
+            if (!mapData.regions[l.codeRegion]) {
+                const rInfo = regNames.find(rn => rn.code === l.codeRegion);
+                mapData.regions[l.codeRegion] = { nom: rInfo ? rInfo.nom : 'Région', pop: 0, church: 0 };
+            }
+            const d = mapData.depts[l.code];
+            if (d) {
+                mapData.regions[l.codeRegion].pop += d.pop;
+                mapData.regions[l.codeRegion].church += d.church;
+            }
+        });
 
-            // 2. Traiter les départements et agréger vers les régions
-            depts.forEach(d => {
-                const churches = cnefData[d.code] || 0;
-                const pop = d.population || 0;
-                const rate = pop > 0 ? (churches / pop) * 10000 : 0;
+        Object.keys(mapData.regions).forEach(rid => {
+            const r = mapData.regions[rid];
+            r.rate = (r.church / r.pop) * 10000;
+        });
 
-                storage.depts[d.code] = { nom: d.nom, pop: pop, churches: churches, rate: rate };
-
-                // Somme vers la région parente
-                if (storage.regions[d.codeRegion]) {
-                    storage.regions[d.codeRegion].pop += pop;
-                    storage.regions[d.codeRegion].churches += churches;
-                }
-            });
-
-            // 3. Calculer les taux finaux des régions
-            Object.keys(storage.regions).forEach(code => {
-                const reg = storage.regions[code];
-                reg.rate = reg.pop > 0 ? (reg.churches / reg.pop) * 10000 : 0;
-            });
-
-            document.getElementById('loader').style.display = 'none';
-            draw('depts');
-        } catch (e) {
-            console.error("API Error", e);
-            alert("Erreur lors de l'appel à l'API Gouv");
-        }
+        render();
     }
 
-    function draw(mode) {
+    function render() {
         if (geoLayer) map.removeLayer(geoLayer);
-        const url = mode === 'depts' 
+        const url = currentMode === 'depts' 
             ? 'https://raw.githubusercontent.com/gregoiredavid/france-geojson/master/departements-avec-outre-mer.geojson'
             : 'https://raw.githubusercontent.com/gregoiredavid/france-geojson/master/regions-avec-outre-mer.geojson';
 
         fetch(url).then(r => r.json()).then(geo => {
             geoLayer = L.geoJson(geo, {
                 style: (f) => {
-                    const data = storage[mode][f.properties.code] || { rate: 0 };
-                    return { fillColor: getColor(data.rate), weight: 1, color: 'white', fillOpacity: 0.8 };
+                    const id = f.properties.code;
+                    const d = mapData[currentMode][id] || { rate: 0 };
+                    return { fillColor: getColor(d.rate), weight: 1, color: 'white', fillOpacity: 0.8 };
                 },
                 onEachFeature: (f, layer) => {
-                    layer.on('click', () => updateUI(storage[mode][f.properties.code]));
+                    layer.on('click', () => {
+                        const id = f.properties.code;
+                        const d = mapData[currentMode][id];
+                        updateUI(f.properties.nom, d);
+                    });
                 }
             }).addTo(map);
         });
@@ -161,34 +161,34 @@
         return colors[0];
     }
 
-    function updateUI(data) {
-        if (!data) return;
-        document.getElementById('placeholder').style.display = 'none';
-        document.getElementById('details').style.display = 'block';
-        document.getElementById('view-name').innerText = data.nom;
-        document.getElementById('view-churches').innerText = data.churches;
-        document.getElementById('view-pop').innerText = data.pop.toLocaleString();
-        document.getElementById('view-rate').innerText = data.rate.toFixed(2);
+    function updateUI(name, d) {
+        if (!d) return;
+        document.getElementById('intro').style.display = 'none';
+        document.getElementById('data-view').style.display = 'block';
+        document.getElementById('z-name').innerText = name;
+        document.getElementById('z-pop').innerText = d.pop.toLocaleString('fr-FR');
+        document.getElementById('z-church').innerText = d.church;
+        document.getElementById('z-rate').innerText = d.rate.toFixed(2);
         
-        const prog = Math.min((data.rate / 1) * 100, 100);
-        document.getElementById('view-progress').style.width = prog + '%';
-        document.getElementById('view-progress').style.backgroundColor = data.rate >= 1 ? '#2e7d32' : '#e65100';
-        document.getElementById('view-goal').innerText = data.rate >= 1 ? "OBJECTIF ATTEINT" : `Distance à l'objectif : ${Math.round(100-prog)}%`;
+        const prog = Math.min((d.rate / 1) * 100, 100);
+        document.getElementById('z-fill').style.width = prog + '%';
+        document.getElementById('z-fill').style.backgroundColor = d.rate >= 1 ? '#2e7d32' : '#e65100';
+        document.getElementById('z-msg').innerText = d.rate >= 1 ? "OBJECTIF ATTEINT" : `Distance objectif : ${Math.round(100-prog)}%`;
     }
 
-    document.getElementById('toggle-view').addEventListener('change', (e) => {
-        const mode = e.target.checked ? 'regions' : 'depts';
-        document.getElementById('mode-label').innerText = "Vue : " + (e.target.checked ? "Régions" : "Départements");
-        draw(mode);
-    });
+    function toggleMode() {
+        currentMode = currentMode === 'depts' ? 'regions' : 'depts';
+        document.getElementById('btn-depts').classList.toggle('active');
+        document.getElementById('btn-regions').classList.toggle('active');
+        render();
+    }
 
-    // Légende
-    const leg = document.getElementById('legend');
+    const leg = document.getElementById('legend-list');
     grades.forEach((g, i) => {
-        leg.innerHTML += `<div class="legend-item"><div class="color-box" style="background:${colors[i]}"></div> <span>${g.toFixed(2)}</span></div>`;
+        leg.innerHTML += `<div class="legend-item"><div class="color-key" style="background:${colors[i]}"></div> <span>${g.toFixed(2)}</span></div>`;
     });
 
-    fetchData();
+    init();
 </script>
 </body>
 </html>
