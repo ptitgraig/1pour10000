@@ -3,302 +3,166 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CNEF - Statistiques par Régions (Données INSEE)</title>
-    
+    <title>CNEF - Carte Interactive (Départements & Régions)</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    
     <style>
-        :root {
-            --cnef-orange: #e65100;
-            --bg-light: #fdfdfd;
-        }
+        :root { --cnef-orange: #e65100; --bg-light: #fdfdfd; }
+        body { font-family: 'Segoe UI', sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; background: var(--bg-light); }
+        header { background: white; padding: 15px 25px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); z-index: 1000; display: flex; justify-content: space-between; align-items: center; }
+        header h1 { margin: 0; font-size: 1.2rem; color: var(--cnef-orange); }
+        
+        /* Toggle Switch Style */
+        .switch-container { display: flex; align-items: center; gap: 10px; font-weight: bold; }
+        .switch { position: relative; display: inline-block; width: 50px; height: 24px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 24px; }
+        .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
+        input:checked + .slider { background-color: var(--cnef-orange); }
+        input:checked + .slider:before { transform: translateX(26px); }
 
-        body {
-            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            margin: 0;
-            display: flex;
-            flex-direction: column;
-            height: 100vh;
-            background-color: var(--bg-light);
-        }
-
-        header {
-            background: white;
-            padding: 15px 25px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            z-index: 1000;
-        }
-
-        header h1 {
-            margin: 0;
-            font-size: 1.4rem;
-            color: var(--cnef-orange);
-            text-transform: uppercase;
-        }
-
-        #main-container {
-            display: flex;
-            flex: 1;
-            overflow: hidden;
-        }
-
+        #main-container { display: flex; flex: 1; overflow: hidden; }
         #map { flex: 2; background: #f0f0f0; }
-
-        #side-panel {
-            flex: 1;
-            min-width: 380px;
-            max-width: 450px;
-            background: white;
-            border-left: 1px solid #ddd;
-            padding: 25px;
-            display: flex;
-            flex-direction: column;
-            box-shadow: -2px 0 10px rgba(0,0,0,0.05);
-            overflow-y: auto;
-        }
-
-        .stats-box {
-            background: #fff8f5;
-            border: 1px solid #ffe0b2;
-            border-radius: 8px;
-            padding: 20px;
-            margin-top: 20px;
-        }
-
-        .rate-value {
-            font-size: 3.5rem;
-            font-weight: bold;
-            color: var(--cnef-orange);
-            display: block;
-        }
-
-        .rate-label {
-            font-size: 0.95rem;
-            color: #888;
-            margin-bottom: 15px;
-            display: block;
-        }
-
-        .progress-container {
-            background: #eee;
-            height: 14px;
-            border-radius: 7px;
-            margin: 20px 0;
-            overflow: hidden;
-        }
-
-        .progress-bar {
-            height: 100%;
-            background: var(--cnef-orange);
-            transition: width 0.5s ease;
-        }
-
-        .church-info {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 15px;
-            font-weight: bold;
-            color: #555;
-        }
-
-        .calculation-box {
-            background: #f1f3f5;
-            border-radius: 6px;
-            padding: 15px;
-            font-size: 0.9rem;
-            color: #555;
-            margin-top: 15px;
-            border: 1px solid #ddd;
-        }
-
-        .loader {
-            color: var(--cnef-orange);
-            font-weight: bold;
-            padding: 10px;
-        }
-
-        @media (max-width: 1000px) {
-            #main-container { flex-direction: column; }
-            #side-panel { max-width: none; border-left: none; border-top: 1px solid #ddd; }
-        }
+        #side-panel { flex: 1; min-width: 350px; background: white; padding: 25px; border-left: 1px solid #ddd; overflow-y: auto; }
+        
+        .stats-box { background: #fff8f5; border: 1px solid #ffe0b2; border-radius: 8px; padding: 20px; margin-top: 20px; }
+        .rate-value { font-size: 3rem; font-weight: bold; color: var(--cnef-orange); }
+        .progress-container { background: #eee; height: 12px; border-radius: 6px; margin: 15px 0; overflow: hidden; }
+        .progress-bar { height: 100%; background: var(--cnef-orange); transition: width 0.5s; }
+        .church-info { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 0.95rem; }
+        .loader { color: var(--cnef-orange); font-weight: bold; }
     </style>
 </head>
 <body>
 
 <header>
-    <h1>Taux de pénétration par Région</h1>
-    <p>Données Population : API INSEE/Geo via api.gouv.fr (Temps Réel)</p>
+    <div>
+        <h1>Objectif : 1 Église pour 10 000 habitants</h1>
+        <span id="current-view-label" style="font-size: 0.8rem; color: #666;">Vue actuelle : Départements</span>
+    </div>
+    <div class="switch-container">
+        <span>Dépts</span>
+        <label class="switch">
+            <input type="checkbox" id="view-toggle" onchange="toggleView()">
+            <span class="slider"></span>
+        </label>
+        <span>Régions</span>
+    </div>
 </header>
 
 <div id="main-container">
     <div id="map"></div>
     <div id="side-panel">
-        <div id="loading-status" class="loader">Chargement des données INSEE...</div>
-        
-        <div id="intro-text" style="display:none;">
-            <h3>Carte des Régions</h3>
-            <p>Cliquez sur une région pour voir les statistiques à jour.</p>
-        </div>
-        
-        <div id="data-view" style="display: none;">
-            <h2 id="reg-name">Nom de la Région</h2>
-            
-            <div class="church-info">
-                <span>Églises (Estimation CNEF) :</span>
-                <span id="reg-churches">0</span>
-            </div>
-
-            <div class="church-info">
-                <span>Population (INSEE) :</span>
-                <span id="reg-population">Chargement...</span>
-            </div>
-
-            <div class="stats-box">
-                <span class="rate-label">Taux calculé</span>
-                <span class="rate-value" id="reg-rate">0.00</span>
-                <span class="rate-label">églises / 10 000 hab.</span>
-                
-                <div class="progress-container">
-                    <div id="reg-progress" class="progress-bar" style="width: 0%"></div>
-                </div>
-                <p id="goal-text" style="font-size: 0.85rem; text-align: right; color: #666;"></p>
-            </div>
-
-            <div class="calculation-box">
-                <strong>Source :</strong> Données de population certifiées INSEE.
-            </div>
+        <div id="loading-status" class="loader">Initialisation des données Insee...</div>
+        <div id="details-content">
+            <h3>Sélectionnez une zone</h3>
+            <p>Cliquez sur la carte pour voir les détails.</p>
         </div>
     </div>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
 <script>
-    // 1. Agrégation des données CNEF par code région (Insee)
-    // Nous regroupons les données départements vers les régions françaises
-    const regionCNEFData = {
-        '11': { nom: 'Île-de-France', eglises: 452 },
-        '24': { nom: 'Centre-Val de Loire', eglises: 84 },
-        '27': { nom: 'Bourgogne-Franche-Comté', eglises: 125 },
-        '28': { nom: 'Normandie', eglises: 107 },
-        '32': { nom: 'Hauts-de-France', eglises: 157 },
-        '44': { nom: 'Grand Est', eglises: 156 },
-        '52': { nom: 'Pays de la Loire', eglises: 74 },
-        '53': { nom: 'Bretagne', eglises: 72 },
-        '75': { nom: 'Nouvelle-Aquitaine', eglises: 147 },
-        '76': { nom: 'Occitanie', eglises: 244 },
-        '84': { nom: 'Auvergne-Rhône-Alpes', eglises: 323 },
-        '93': { nom: 'Provence-Alpes-Côte d\'Azur', eglises: 221 },
-        '94': { nom: 'Corse', eglises: 12 },
-        '01': { nom: 'Guadeloupe', eglises: 69 },
-        '02': { nom: 'Martinique', eglises: 76 },
-        '03': { nom: 'Guyane', eglises: 150 },
-        '04': { nom: 'La Réunion', eglises: 54 },
-        '06': { nom: 'Mayotte', eglises: 8 }
+    // Données initiales (Églises par département)
+    const deptEglises = {
+        '01': 18, '02': 13, '03': 13, '04': 7, '05': 7, '06': 41, '07': 24, '08': 7, '09': 9, '10': 12,
+        '11': 17, '12': 6, '13': 80, '14': 18, '15': 4, '16': 10, '17': 16, '18': 9, '19': 6, '21': 14,
+        '22': 12, '23': 3, '24': 7, '25': 37, '26': 40, '27': 21, '28': 16, '29': 20, '30': 54, '31': 49,
+        '32': 8, '33': 41, '34': 48, '35': 24, '36': 7, '37': 21, '38': 40, '39': 11, '40': 15, '41': 8,
+        '42': 16, '43': 12, '44': 28, '45': 23, '46': 6, '47': 21, '48': 5, '49': 13, '50': 13, '51': 15,
+        '52': 6, '53': 5, '54': 18, '55': 6, '56': 16, '57': 33, '58': 6, '59': 79, '60': 23, '61': 10,
+        '62': 33, '63': 16, '64': 21, '65': 7, '66': 21, '67': 72, '68': 53, '69': 66, '70': 10, '71': 22,
+        '72': 10, '73': 13, '74': 23, '75': 74, '76': 45, '77': 51, '78': 45, '79': 6, '80': 8, '81': 21,
+        '82': 12, '83': 26, '84': 26, '85': 8, '86': 16, '87': 11, '88': 17, '89': 13, '90': 7, '91': 51,
+        '92': 40, '93': 94, '94': 46, '95': 52, '971': 69, '972': 76, '973': 150, '974': 54, '976': 8, '2A': 7, '2B': 5
     };
 
-    let apiPopulationData = {}; // Sera rempli par l'API
-    const grades = [0.10, 0.20, 0.30, 0.40, 0.50, 0.60, 0.70, 0.80];
-    const colors = ['#fff5eb', '#fee6ce', '#fdd0a2', '#fdae6b', '#fd8d3c', '#f16913', '#d94801', '#8c2d04'];
+    let popDepts = {}, popRegs = {}, eglisesRegs = {}, currentLayer;
+    let isRegionView = false;
+    const grades = [0.1, 0.3, 0.5, 0.7, 0.9, 1.1, 1.5];
+    const colors = ['#fff5eb', '#fee6ce', '#fdd0a2', '#fdae6b', '#fd8d3c', '#f16913', '#d94801'];
+
+    const map = L.map('map').setView([46.6, 2.2], 6);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png').addTo(map);
+
+    async function initData() {
+        try {
+            // Fetch Populations Insee
+            const [resD, resR] = await Promise.all([
+                fetch('https://geo.api.gouv.fr/departements?fields=nom,population,codeRegion'),
+                fetch('https://geo.api.gouv.fr/regions?fields=nom,population')
+            ]);
+            const depts = await resD.json();
+            const regs = await resR.json();
+
+            depts.forEach(d => {
+                popDepts[d.code] = d.population || 0;
+                // Agrégation des églises par région
+                if (deptEglises[d.code]) {
+                    eglisesRegs[d.codeRegion] = (eglisesRegs[d.codeRegion] || 0) + deptEglises[d.code];
+                }
+            });
+            regs.forEach(r => popRegs[r.code] = r.population || 0);
+
+            document.getElementById('loading-status').style.display = 'none';
+            renderMap();
+        } catch (e) { console.error(e); }
+    }
 
     function getColor(rate) {
-        for (let i = grades.length - 1; i >= 0; i--) {
-            if (rate >= grades[i]) return colors[i];
-        }
+        for (let i = grades.length - 1; i >= 0; i--) { if (rate >= grades[i]) return colors[i]; }
         return colors[0];
     }
 
-    const map = L.map('map').setView([46.60, 1.88], 6);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-        attribution: 'Population: INSEE | &copy; OpenStreetMap'
-    }).addTo(map);
+    function renderMap() {
+        if (currentLayer) map.removeLayer(currentLayer);
+        const url = isRegionView ? 
+            'https://raw.githubusercontent.com/gregoiredavid/france-geojson/master/regions-avec-outre-mer.geojson' :
+            'https://raw.githubusercontent.com/gregoiredavid/france-geojson/master/departements-avec-outre-mer.geojson';
 
-    // 2. FONCTION POUR APPELER L'API INSEE (VIA GEO API)
-    async function fetchInseeData() {
-        try {
-            const response = await fetch('https://geo.api.gouv.fr/regions?fields=nom,population');
-            const data = await response.json();
-            
-            data.forEach(reg => {
-                apiPopulationData[reg.code] = reg.population;
-            });
-            
-            document.getElementById('loading-status').style.display = 'none';
-            document.getElementById('intro-text').style.display = 'block';
-            loadMapLayers();
-        } catch (error) {
-            console.error("Erreur API:", error);
-            document.getElementById('loading-status').innerText = "Erreur de chargement des données API.";
-        }
-    }
-
-    function loadMapLayers() {
-        // GeoJSON des REGIONS françaises
-        fetch('https://raw.githubusercontent.com/gregoiredavid/france-geojson/master/regions-avec-outre-mer.geojson')
-            .then(res => res.json())
-            .then(geojson => {
-                L.geoJson(geojson, {
-                    style: function(feature) {
-                        const code = feature.properties.code;
-                        const pop = apiPopulationData[code] || 0;
-                        const churches = regionCNEFData[code] ? regionCNEFData[code].eglises : 0;
-                        const rate = pop > 0 ? (churches / pop) * 10000 : 0;
-                        
-                        return {
-                            fillColor: getColor(rate),
-                            weight: 1.5,
-                            opacity: 1,
-                            color: 'white',
-                            fillOpacity: 0.8
-                        };
-                    },
-                    onEachFeature: onEachFeature
-                }).addTo(map);
-            });
-    }
-
-    function onEachFeature(feature, layer) {
-        layer.on({
-            mouseover: (e) => { e.target.setStyle({ fillOpacity: 1, weight: 3 }); },
-            mouseout: (e) => { e.target.setStyle({ fillOpacity: 0.8, weight: 1.5 }); },
-            click: (e) => {
-                const code = feature.properties.code;
-                const name = feature.properties.nom;
-                const pop = apiPopulationData[code] || 0;
-                const churches = regionCNEFData[code] ? regionCNEFData[code].eglises : 0;
-                const rate = pop > 0 ? (churches / pop) * 10000 : 0;
-                
-                showDetails(name, churches, pop, rate);
-            }
+        fetch(url).then(r => r.json()).then(geojson => {
+            currentLayer = L.geoJson(geojson, {
+                style: (feature) => {
+                    const code = feature.properties.code;
+                    const pop = isRegionView ? popRegs[code] : popDepts[code];
+                    const egl = isRegionView ? eglisesRegs[code] : deptEglises[code];
+                    const rate = pop ? (egl / pop) * 10000 : 0;
+                    return { fillColor: getColor(rate), weight: 1, color: 'white', fillOpacity: 0.8 };
+                },
+                onEachFeature: (feature, layer) => {
+                    layer.on('click', () => updateDetails(feature.properties));
+                }
+            }).addTo(map);
         });
     }
 
-    function showDetails(name, churches, population, rate) {
-        document.getElementById('intro-text').style.display = 'none';
-        document.getElementById('data-view').style.display = 'block';
-        
-        document.getElementById('reg-name').innerText = name;
-        document.getElementById('reg-churches').innerText = churches;
-        document.getElementById('reg-population').innerText = population.toLocaleString('fr-FR');
-        document.getElementById('reg-rate').innerText = rate.toFixed(2);
-        
+    function updateDetails(props) {
+        const code = props.code;
+        const name = props.nom;
+        const pop = isRegionView ? popRegs[code] : popDepts[code];
+        const egl = (isRegionView ? eglisesRegs[code] : deptEglises[code]) || 0;
+        const rate = pop ? (egl / pop) * 10000 : 0;
         const progress = Math.min((rate / 1.0) * 100, 100);
-        const bar = document.getElementById('reg-progress');
-        bar.style.width = progress + '%';
-        
-        if (rate >= 1) {
-            bar.style.backgroundColor = '#2e7d32';
-            document.getElementById('goal-text').innerText = "Objectif atteint !";
-        } else {
-            bar.style.backgroundColor = '#e65100';
-            document.getElementById('goal-text').innerText = `${Math.round(100 - progress)}% restants pour l'objectif`;
-        }
+
+        document.getElementById('details-content').innerHTML = `
+            <h2>${name} (${code})</h2>
+            <div class="church-info"><span>Églises CNEF :</span> <b>${egl}</b></div>
+            <div class="church-info"><span>Pop. Insee :</span> <b>${pop.toLocaleString()}</b></div>
+            <div class="stats-box">
+                <span style="color:#888">Taux pour 10k hab.</span><br>
+                <span class="rate-value">${rate.toFixed(2)}</span>
+                <div class="progress-container"><div class="progress-bar" style="width:${progress}%; background:${rate >= 1 ? '#2e7d32' : ''}"></div></div>
+                <p style="font-size:0.8rem">${rate >= 1 ? 'Objectif atteint !' : Math.round(100-progress)+'% restants'}</p>
+            </div>
+        `;
     }
 
-    // Lancer l'acquisition des données au démarrage
-    fetchInseeData();
+    function toggleView() {
+        isRegionView = document.getElementById('view-toggle').checked;
+        document.getElementById('current-view-label').innerText = "Vue actuelle : " + (isRegionView ? "Régions" : "Départements");
+        renderMap();
+    }
 
+    initData();
 </script>
-
 </body>
 </html>
